@@ -1,0 +1,13 @@
+{
+  "servers": {
+    "upload_post_mcp": {
+      "command": "python",
+      "args": [
+        "C:\\Users\\raely\\Desktop\\upload_post_mcp\\upload_post_mcp\\server.py"
+      ],
+      "env": {
+        "UPLOADPOST_API_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InJhZWx5bkBzdGVsbGFybXVzaWMuZGsiLCJleHAiOjQ5MTc2NjcyODgsImp0aSI6IjYwMWNjYzgyLTNiZTMtNGU3ZC05ZWM1LTg5OGYyNWQxNTk0YyJ9.f49KhDE3R8x23VgN4exoMwBaqn57ba3jFCi5ehUnpdc"
+      }
+    }
+  }
+}
