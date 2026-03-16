@@ -19,8 +19,8 @@ class UploadPostClient:
         self.publish_tiktok_path = os.getenv(
             "UPLOADPOST_PUBLISH_TIKTOK_PATH", "/v1/publish/tiktok"
         )
-        self.check_status_path_template = os.getenv(
-            "UPLOADPOST_CHECK_STATUS_PATH_TEMPLATE", "/v1/uploads/{upload_id}/status"
+        self.check_status_path = os.getenv(
+            "UPLOADPOST_CHECK_STATUS_PATH", "/uploadposts/status"
         )
         self.connected_accounts_path = os.getenv(
             "UPLOADPOST_CONNECTED_ACCOUNTS_PATH", "/uploadposts/users"
@@ -265,10 +265,13 @@ def publish_local_video_to_tiktok(
             platforms=["tiktok"],
             **sdk_kwargs,
         )
-        return {
+        sdk_result: dict[str, Any] = {
             "mode": "sdk_direct_upload_publish",
             "sdk_response": sdk_response,
         }
+        if isinstance(sdk_response, dict) and sdk_response.get("request_id"):
+            sdk_result["request_id"] = sdk_response["request_id"]
+        return sdk_result
     except Exception as exc:  # noqa: BLE001
         sdk_error = exc
 
@@ -312,11 +315,19 @@ def publish_local_video_to_tiktok(
     # Some Upload-Post deployments publish directly on /upload and do not return video URL.
     if not uploaded_video_url and isinstance(upload_response, dict):
         if upload_response.get("success") is True:
-            return {
+            result: dict[str, Any] = {
                 "mode": "direct_upload_publish",
                 "upload_response": upload_response,
                 "message": "Upload endpoint already handled publishing. No follow-up publish call required.",
             }
+            # Surface request_id so callers can poll check_upload_status.
+            req_id = upload_response.get("request_id")
+            if req_id:
+                result["request_id"] = req_id
+                result["message"] += (
+                    f" Use check_upload_status(request_id='{req_id}') to track progress."
+                )
+            return result
 
     if not uploaded_video_url:
         raise RuntimeError(
@@ -348,11 +359,21 @@ def publish_local_video_to_tiktok(
 
 
 @mcp.tool()
-def check_upload_status(upload_id: str) -> dict[str, Any]:
-    """Check Upload-Post task status by upload id."""
+def check_upload_status(request_id: str) -> dict[str, Any]:
+    """Check Upload-Post async task status by request_id."""
     client = _get_client()
-    path = client.check_status_path_template.format(upload_id=upload_id)
-    return client._get(path)
+    url = client._build_url(client.check_status_path)
+    try:
+        response = client.session.get(
+            url, params={"request_id": request_id}, timeout=client.timeout
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.HTTPError as exc:
+        details = client._read_error_details(exc.response)
+        raise RuntimeError(f"Upload-Post API HTTP error: {details}") from exc
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Upload-Post API request failed: {exc}") from exc
 
 
 @mcp.tool()
